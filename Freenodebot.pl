@@ -1,16 +1,57 @@
 #!/usr/bin/env perl6
 use v6;
 use Net::IRC::Bot;
-use Net::IRC::Modules::ACME;
-use Net::IRC::Modules::Autoident;
+use Net::IRC::Modules::Ping;
 
-Net::IRC::Bot.new(
-	nick       => 'nyhymrg',
+my $chan = '#perl6';
+
+my $bot = Net::IRC::Bot.new(
+	nick       => 'tadzikbot',
 	server     => 'irc.freenode.org',
-	channels   => <#bottest>,
+	channels   => [$chan],
 	modules    => ( 
-		Net::IRC::Modules::ACME::Eightball.new, 
-		#Net::IRC::Modules::ACME::Unsmith.new 
+		Net::IRC::Modules::Ping.new
 	),
 	debug      => True,
-).run;
+);
+
+say "Handlers set";
+$bot.run;
+
+my $a = IO::Socket::INET.new(
+    localhost => 'localhost',
+    localport => 1337,
+    listen => 1,
+);
+
+MuEvent::socket(
+    socket => $a,
+    poll   => 'r',
+    cb     => &socket-cb,
+    params => { sock => $a },
+);
+
+sub socket-cb(:$sock) {
+    say "Oh gosh a client!";
+    my $s = $sock.accept;
+    
+    MuEvent::socket(
+        socket => $s, 
+        poll   => 'r',
+        params => { sock => $s },
+        cb     => sub (:$sock) {
+            my $a = try $sock.recv;
+            if $a {
+                note "I can has: {$a.perl}";
+                $bot.sendmsg($a.chomp, $chan);
+                return True;
+            } else {
+                return False;
+            }
+        }
+    );
+
+    return True;
+}
+
+MuEvent::run;
