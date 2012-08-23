@@ -2,6 +2,7 @@ use v6;
 use Net::IRC::Handlers::Default;
 use Net::IRC::Parser;
 use Net::IRC::Event;
+use MuEvent;
 
 class Net::IRC::Bot {
 	has $conn is rw;
@@ -73,21 +74,23 @@ class Net::IRC::Bot {
 		}
 	}
 
-
 	method run() {					
 		self!disconnect;
 		self!connect;
-		loop {
-			#XXX: Support for timed events?
-			my $line = $conn.get
-				or die "Connection error.";
+        MuEvent::socket(
+            socket => $conn,
+            poll   => 'r',
+            params => { sock => $conn },
+            cb     => sub (:$sock) {
+                my $line = $sock.get or die "Connection error.";
+                my $event = Net::IRC::Parser::RawEvent.parse($line)
+                    or note("Could not parse the following IRC event: $line") and return True;
 
-			my $event = Net::IRC::Parser::RawEvent.parse($line)
-				or $*ERR.say("Could not parse the following IRC event: $line") and next;
-
-			say ~$event if $.debug;
-			self!dispatch($event);
-		}
+                say ~$event if $.debug;
+			    self!dispatch($event);
+                return True;
+            }
+        );
 	}
 
 	method !dispatch($raw) {
